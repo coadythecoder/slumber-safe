@@ -201,7 +201,7 @@ up_times = [time_axis[i] for i in ups]
 # Calculate the result as breaths per minute
 total_impulses = len(up_times)
 total_time = time_axis[-1] - time_axis[0]  # Total time in seconds
-breaths_per_minute = (total_impulses / 2) / total_time * 60  # Convert to breaths per minute
+breaths_per_minute = total_impulses / total_time * 60  # Convert to breaths per minute
 
 # Define the common x-axis range
 x_start, x_end = 0, 30  # Start and end time for the x-axis

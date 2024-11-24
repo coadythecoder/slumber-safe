@@ -133,11 +133,6 @@ while cap.isOpened():
     ekg_graph[:, :-1] = ekg_graph[:, 1:]  # Shift graph left
     ekg_graph[:, -1] = 0  # Clear the last column
     ekg_graph[ekg_height - ekg_value - 1, -1] = 255  # Draw the current EKG value
-
-    # Overlay the EKG graph on the frame
-    ekg_y_offset = box_y + 150
-    ekg_colored = cv2.cvtColor(ekg_graph, cv2.COLOR_GRAY2BGR)  # Convert to BGR for overlay
-    displayed_frame[ekg_y_offset:ekg_y_offset + ekg_height, box_x:box_x + ekg_width] = ekg_colored
        
     # Display the frame
     cv2.imshow('Live Feed Movement', frame_abs_diff)
