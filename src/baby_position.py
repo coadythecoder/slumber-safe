@@ -49,7 +49,7 @@ def compute_baby_upper_half_position(frame, prev_x, prev_y, prev_w, prev_h):
         # Assume the first valid bounding box is the baby
         i = indexes.flatten()[0]
         x, y, w, h =  boxes[i]  # Returns [x, y, w, h]
-        return x, y, w, h
+        return max(x,0), max(y,0), w, h
 
-    # If no person detected, return previous values
-    return prev_x, prev_y, prev_w, prev_h
+    # If no person detected, return full frame values
+    return 0, 0, width, height

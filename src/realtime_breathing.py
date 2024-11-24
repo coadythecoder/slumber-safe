@@ -3,13 +3,14 @@ import numpy as np
 import time
 import neurokit2 as nk
 from baby_position import compute_baby_upper_half_position  
+from collections import defaultdict  # For grouping detections
+import matplotlib.pyplot as plt  # For plotting
 
 baby_position_update_interval = 10 # seconds
-baby_video_path = "../media/Late_Night_Breathing.MOV"
+baby_video_path = "../media/Late_Breathing.MP4"
 
 # Initial settings
 colour_breath = (0, 200, 0)  # Initial color for Breath
-colour_pulse = (0, 200, 0)   # Initial color for Pulse
 ekg_width, ekg_height = 180, 50  # Dimensions of the EKG graph
 ekg_graph = np.zeros((ekg_height, ekg_width), dtype=np.uint8)  # EKG graph buffer
 
@@ -21,11 +22,8 @@ ekg_signal = ekg_signal.astype(int)  # Ensure integer values
 
 frame_count = 0
 
-
-# cap = cv2.VideoCapture(0)
-
 # Read baby video
-cap = cv2.VideoCapture(baby_video_path)
+cap = cv2.VideoCapture(0)
 
 if not cap.isOpened():
     print(f"Error: Cannot open the webcam feed.")
@@ -35,17 +33,11 @@ width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
 height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 fps = cap.get(cv2.CAP_PROP_FPS)
 
-# fourcc = cv2.VideoWriter_fourcc(*'XVID')
-# # filepath of saved (processed) video
-# output_path = "output_abs_video.avi"
-# out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-
-
+# Initialize variables
+start_time = time.time()
+detection_intervals = []
 
 ret, prev_frame = cap.read()
-
-# image_path = "../media/baby_picture_3.jpeg"
-# prev_frame = cv2.imread(image_path)
 
 x, y, w, h = 0, 0, 0, 0
 first_frame = True
@@ -65,9 +57,6 @@ while cap.isOpened():
     ret, frame = cap.read()
     if not ret:
         break
-
-    # # Change the frame that's analyzed
-    # frame = cv2.imread(image_path)
 
     # Update the ROI at specified seconds interval and for first frame
     current_time = time.time()
@@ -92,16 +81,19 @@ while cap.isOpened():
 
     # Set a movement threshold
     roi_area = w * h
-    movement_threshold = 0.0040 * roi_area
+    movement_threshold = 0.0020 * roi_area
+    movement_detected = movement_intensity > movement_threshold
 
     # Determine if movement is detected
-    if movement_intensity > movement_threshold:
+    if movement_detected:
         status = "Breathing"
         displayed_status = "Breathing"
         last_breathing_update_time = current_time
         colour_breath = (0, 200, 0)
     else:
         status = "Not Breathing"
+
+    detection_intervals.append(1 if movement_detected else 0)
 
 
     # Update the displayed to not breathing if no movement detected for 10 seconds
@@ -119,11 +111,9 @@ while cap.isOpened():
         # Draw the ROI on the frame
         cv2.rectangle(displayed_frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
 
-        # Display the status on the frame
-        cv2.putText(displayed_frame, f"Current status: {status}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
-                        1, (0, 255, 0) if status == "Breathing" else (0, 0, 255), 2)
-        cv2.putText(displayed_frame, f"Estimated status: {displayed_status}", (10, 70), cv2.FONT_HERSHEY_SIMPLEX,
-                        1, (0, 255, 0) if displayed_status == "Breathing" else (0, 0, 255), 2)
+        # Display the status on the frame at the top right
+        cv2.putText(displayed_frame, f"Current status: {status}", (width - 500, 30), 
+            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0) if status == "Breathing" else (0, 0, 255), 2)
     
     # Add a legend box to the frame
     box_x, box_y, box_w, box_h = 10, 10, 200, 220
@@ -134,12 +124,9 @@ while cap.isOpened():
     cv2.putText(displayed_frame, "Slumber Safe", (box_x + 10, box_y + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2, lineType=cv2.LINE_AA)  # Foreground (White text)
     cv2.putText(displayed_frame, "q: Quit", (box_x + 10, box_y + 55), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (50, 50, 50), 1)
 
-    # Add text for Breath and Pulse with corresponding circles
+    # Add text for Breath corresponding circles
     cv2.putText(displayed_frame, "Breath:", (box_x + 10, box_y + 90), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 50, 50), 2)
     cv2.circle(displayed_frame, (box_x + 150, box_y + 85), 10, colour_breath, -1)  # Circle for Breath
-
-    cv2.putText(displayed_frame, "Pulse:", (box_x + 10, box_y + 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (50, 50, 50), 2)
-    cv2.circle(displayed_frame, (box_x + 150, box_y + 115), 10, colour_pulse, -1)  # Circle for Pulse
 
     # Update the EKG graph
     ekg_value = ekg_signal[frame_count % len(ekg_signal)]  # Get the current EKG value
@@ -151,25 +138,7 @@ while cap.isOpened():
     ekg_y_offset = box_y + 150
     ekg_colored = cv2.cvtColor(ekg_graph, cv2.COLOR_GRAY2BGR)  # Convert to BGR for overlay
     displayed_frame[ekg_y_offset:ekg_y_offset + ekg_height, box_x:box_x + ekg_width] = ekg_colored
-
-
-    # # Normalize the frame_abs_diff for better visibility
-    # frame_abs_diff_normalized = cv2.normalize(frame_abs_diff, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-    # frame_abs_diff_normalized = frame_abs_diff_normalized.astype(np.uint8)
-
-    # # Optional: Apply thresholding
-    # _, frame_abs_diff_thresh = cv2.threshold(frame_abs_diff_normalized, 30, 255, cv2.THRESH_BINARY)
-
-    # # Apply a color map for enhanced contrast
-    # frame_abs_diff_colored = cv2.applyColorMap(frame_abs_diff_normalized, cv2.COLORMAP_JET)
-
-    # # Display the enhanced frame_abs_diff
-    # cv2.imshow('Frame Absolute Difference (Normalized)', frame_abs_diff_normalized)
-    # cv2.imshow('Frame Absolute Difference (Thresholded)', frame_abs_diff_thresh)
-    # cv2.imshow('Frame Absolute Difference (Color Map)', frame_abs_diff_colored)
-
-
-        
+       
     # Display the frame
     cv2.imshow('Live Feed Movement', frame_abs_diff)
     cv2.imshow('Live Feed w/ Movement Detection', displayed_frame)
@@ -183,7 +152,88 @@ while cap.isOpened():
 
 
 cap.release()
-out.release()
 cv2.destroyAllWindows()
 
-# print(f"Processed video saved at {output_path}")
+# Define FPS and desired resolution
+fps = 30  # Frames per second
+intervals_per_second = 10  # Number of data points per second for the graph
+frames_per_interval = fps // intervals_per_second  # Frames per 0.1-second interval
+
+# Aggregate detection data into 0.1-second intervals
+aggregated_detections = [
+    sum(detection_intervals[i:i + frames_per_interval]) / frames_per_interval
+    for i in range(0, len(detection_intervals), frames_per_interval)
+]
+
+# Generate the time axis for the graph
+time_axis = [i * (1 / intervals_per_second) for i in range(len(aggregated_detections))]
+
+# Detect "Up" impulses
+ups = []
+in_up = False
+
+for i, value in enumerate(aggregated_detections):
+    if value == 1:
+        # Start or continue an "up"
+        if not in_up:
+            ups.append([i])  # Start a new "up" with the index
+            in_up = True
+        else:
+            ups[-1].append(i)  # Continue the current "up"
+    elif value == 0.66 and in_up:
+        # Include 0.66 immediately after or before 1
+        ups[-1].append(i)
+    else:
+        # End the current "up" if it exists
+        in_up = False
+
+# Consolidate "up" impulses (one entry per group)
+up_intervals = [min(group) for group in ups]  # Use the first index of each "up"
+
+# Generate time axis for "up" impulses
+up_times = [time_axis[i] for i in up_intervals]
+
+# Calculate the result as breaths per minute
+total_impulses = len(up_times)
+total_time = time_axis[-1] - time_axis[0]  # Total time in seconds
+breaths_per_minute = (total_impulses / 2) / total_time * 60  # Convert to breaths per minute
+
+# Define the common x-axis range
+x_start, x_end = 0, 23  # Start and end time for the x-axis
+x_ticks = range(x_start, x_end + 1, 5)  # Tick marks every 5 seconds
+
+# Plot the first graph (detailed breathing detection)
+plt.figure(figsize=(12, 10), num="Late-Night Breathing Detection Analysis")
+plt.subplot(2, 1, 1)
+plt.plot(time_axis, aggregated_detections, marker='o', linestyle='-', label='Breathing Detection')
+plt.xlabel('Time (seconds)')
+plt.ylabel('Average Cluster Detection (Cluster Size = 3)')
+plt.title('Movement Detection Over Time')
+plt.grid(True)
+plt.legend()
+plt.xlim(x_start, x_end)
+plt.xticks(x_ticks)  # Set consistent tick positions
+
+# Plot the second graph (count of "ups")
+plt.subplot(2, 1, 2)
+plt.scatter(up_times, [1] * len(up_times), color='r', label='Breath Impulses')
+plt.xlabel('Time (seconds)')
+plt.title('Detected Breaths Over Time')
+plt.yticks([1], ["Impulse"])
+plt.grid(True)
+plt.legend()
+plt.xlim(x_start, x_end)
+plt.xticks(x_ticks)  # Set consistent tick positions
+
+# Add the breaths per minute as text to the second graph
+plt.text(
+    x_end - 5, 1.05,  # Position inside the second graph near the top-right
+    f"Rate: {breaths_per_minute:.2f} breaths/min",  # Display breaths per minute
+    fontsize=12,
+    color='blue',
+    horizontalalignment='right',  # Align to the right of the position
+    verticalalignment='top'  # Align text to the top of the position
+)
+
+plt.tight_layout()
+plt.show()
